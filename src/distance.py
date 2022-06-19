@@ -1,71 +1,45 @@
 import json
-import urllib
 import urllib2
-import time
-import extract_number
+from geopy.geocoders import Nominatim
 
-def getDistance(startLoc, endLoc):
-    maps_key = ''
-    base_url = 'https://maps.googleapis.com/maps/api/distancematrix/json'
+geolocator = Nominatim(user_agent="fk")
 
-    # e.g.
-    # https://maps.googleapis.com/maps/api/distancematrix/json?origins=
-    # Seattle&destinations=San+Francisco&key=INSERT_API_KEY
 
-    # Process strings with spaces by replacing spaces with +
-    startLoc = startLoc.replace(" ", "+")
-    endLoc = endLoc.replace(" ", "+")
+def getDistance(startLoc, endLoc, mode):
+    '''
+    return distance and transit time for given origin, destination and transit type
+    :param startLoc: starting location as string
+    :param endLoc: destination location as string
+    :param mode: mode of transit as string
+    :return: start destination distance
+    '''
+    print(startLoc, endLoc)
 
     info = [startLoc, endLoc, 0]
 
     if (startLoc == endLoc):
         info[2] = -1
         return info
-
-    url = base_url + '?' + urllib.urlencode({
-        'units' : 'imperial',
-        'origins': startLoc,
-        'destinations': endLoc,
-        'key': maps_key,
-    })
-
-    current_delay = 0.1 # Initial retry delay at 100ms
-    max_delay = 3600 # Max retry delay at 1 hour
-
+    S = geolocator.geocode(startLoc)
+    E = geolocator.geocode(endLoc)
+    print(E.latitude)
+    origins = str(S.latitude) + ',' + str(S.longitude)
+    destinations = str(E.latitude) + ',' + str(E.longitude)
+    url = 'https://dev.virtualearth.net/REST/v1/Routes/DistanceMatrix?origins=' + origins + '&destinations=' + destinations + '&travelMode=' + mode + '&key='
+    print(url)
     while True:
         try:
             # Get API response
             response = str(urllib2.urlopen(url).read())
         except IOError:
-            pass # Fall through to retry loop (next loop)
+            pass  # Fall through to retry loop (next loop)
         else:
             # No IOError has occurred, so parse result
             result = json.loads(response.replace('\\n', ''))
-            if result['status']  == 'OK':
-                # Get distance value
-                print(result['rows'][0]['elements'])
-                info[2] = extract_number.extract_number(result['rows'][0]['elements'][0]['distance']['text'])
-                # dist = result['rows'][0]['elements'][0]['distance']['text']
+            info[2] = result['resourceSets'][0]['resources'][0]['results'][0]['travelDistance']
+            #time = result['resourceSets'][0]['resources'][0]['results'][0]['travelDuration']
+        return info[2]
 
-                # Check if there is no distance
-                if info[2] == 0:
-                    info[2] = -1
-
-                return info
-            elif result['status'] != 'UNKNOWN_ERROR':
-                # Error cannot be fixed by retrying
-                raise Exception(result['error_message'])
-                info[2] = -1
-                return info
-
-        # Check if current retry delay has exceeded max retry delay
-        if current_delay > max_delay:
-            raise Exception('Too many retry attempts. :(')
-            info[2] = -1
-            return info
-        print('Waiting', current_delay, 'seconds before retrying...')
-        time.sleep(current_delay)
-        current_delay *= 2 # Increase delay each time we need to retry
 
 # Test call
-print(getDistance('UC San Diego', 'Vallartas San Diego'))
+print(getDistance('Aachen west', 'Dortmund haupt bahnhof', 'transit'))
